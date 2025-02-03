@@ -1,0 +1,763 @@
+sap.ui.loader.config({
+    paths: {
+        'cpi': `${$.sap.chromeExtensionURL}utils/js/cpi`,
+        'constants': `${$.sap.chromeExtensionURL}utils/js/constants`,
+        'utils': `${$.sap.chromeExtensionURL}utils/js/utils`
+    }
+});
+sap.ui.define([
+    "cpi",
+    "constants",
+    "sap/m/MessageToast",    
+    "sap/m/BusyDialog",
+    "sap/m/Dialog",
+    "sap/m/Table",
+    "sap/m/Column",
+    "sap/m/ColumnListItem",
+    "sap/m/Text",
+    "sap/m/Button",
+    "sap/ui/model/json/JSONModel",
+    "sap/m/QuickView",
+    "sap/m/QuickViewPage",
+    "sap/m/QuickViewGroup",
+    "sap/m/QuickViewGroupElement",
+    "sap/ui/codeeditor/CodeEditor",
+    "sap/m/VBox",
+    "sap/m/HBox",
+    "sap/m/InputListItem",
+    "sap/m/Input",
+    "sap/m/CheckBox",
+    "sap/m/ProgressIndicator",
+    "sap/m/MessageBox",
+    "sap/m/IconTabBar",
+    "sap/m/IconTabFilter",
+    "sap/m/ObjectStatus",
+    "utils"
+], function(cpi,constants,MessageToast,BusyDialog,Dialog,Table,Column,ColumnListItem,Text,Button,JSONModel,QuickView,QuickViewPage,QuickViewGroup,QuickViewGroupElement,CodeEditor,VBox,HBox,InputListItem,Input,CheckBox,ProgressIndicator,MessageBox,IconTabBar,IconTabFilter,ObjectStatus,utils){
+    "use strict";    
+    console.log("Start eventHandler script")
+    let counterTimer=10;
+    const updateTraceStatusTImer=async(id,iflowId,_status=false,_traceExpires=null)=>{
+        //console.log("updateTraceStatusTImer is running...");
+        const pageHeader=sap.ui.getCore().byId(id);
+        if (pageHeader){
+            const textDescription=pageHeader.getProperty("objectSubtitle").split(" - ")[0];
+            if (textDescription!=''){
+                if (counterTimer>=10){
+                    counterTimer=0;
+                    const iflowIdUIDD=await cpi.getFlowId(iflowId);
+                    let {status,traceExpires,endPointInfo,packageInfo,deployState,state,logLevel}=await cpi.getIflowSTraceStatus(iflowIdUIDD);
+                    if (packageInfo.length==0)
+                        packageInfo=await cpi.getPackage(iflowId);
+                    _status = status == "true"?true:false;
+                    _traceExpires= traceExpires;                    
+                    let jsonInfoIflow=[
+                        {
+                            "label": "Package",
+                            "value": packageInfo.length>0?packageInfo.find(it=>it.name=="artifact.package.name").value:"",
+                            "url": packageInfo.length>0?`${constants.apiBaseURLCPI}/shell/design/contentpackage/${packageInfo.find(it=>it.name=="artifact.package.id").value}?section=ARTIFACTS`:"",
+                            "elementType": "link"
+                        },
+                        {
+                            "label": "Deploy status",
+                            "value": deployState
+                        },
+                        {
+                            "label": "State",
+                            "value": state
+                        },
+                        {
+                            "label": "Log level",
+                            "value": logLevel
+                        }
+                    ];
+                    for(const endPoint of endPointInfo){
+                        jsonInfoIflow.push({
+                            "label": endPoint.endpointCategory,
+                            "value": endPoint.endpointUrl
+                        })
+                    }
+                    const oModelInfoIflow=new JSONModel(jsonInfoIflow);
+                    pageHeader.setModel(oModelInfoIflow,"infoIflow");
+                
+                }
+                const remining=new Date(_traceExpires) - new Date();
+                if (_status && remining>=0){
+                    const seconds = String(Math.floor((remining / 1000) % 60)).padStart(2, '0');
+                    const minutes = String(Math.floor((remining / (1000 * 60)) % 60)).padStart(2, '0');
+                    const hours = String(Math.floor((remining / (1000 * 60 * 60)) % 24)).padStart(2, '0');
+                    pageHeader.setProperty("objectSubtitle", `${textDescription} - Trace enabled time remining: ${hours}:${minutes}:${seconds}`);       
+                }
+                else
+                    pageHeader.setProperty("objectSubtitle", `${textDescription} - Trace disabled`);            
+            }        
+            setTimeout(() => updateTraceStatusTImer(id,iflowId,_status,_traceExpires), 1000);
+            counterTimer++;
+        }        
+    }
+
+    const openEditorDialog=(text)=>{
+        const {textFormat,type}=utils.prettyPrint(text);
+        if (sap.ui.getCore().byId(`${constants.prefixId}EditorDialog`))
+            sap.ui.getCore().byId(`${constants.prefixId}EditorDialog`).destroy();
+        const dialog=new Dialog(`${constants.prefixId}EditorDialog`,{
+            title: `Editor - ${type.toUpperCase()}`,
+            contentWidth: "100%",        
+            contentHeight:"100%",
+            verticalScrolling:false,
+            content: new CodeEditor({
+                        width:"100%",
+                        height:"100%",
+                        editable:false,
+                        type,
+                        colorTheme:"chrome"
+                    }),
+            endButton: new Button({
+                text: "Close",
+                press: ()=>{
+                    dialog.close();
+                    dialog.destroy();                        
+                }
+            })
+        });      
+        dialog.getAggregation("content")[0].setValue(textFormat);        
+        dialog.open();        
+    }
+
+    const openTrace=async(event)=>{
+        const logLevel=event.getSource().getModel().getProperty("LogLevel",event.getSource().getBindingContext());
+        const status=event.getSource().getModel().getProperty("Status",event.getSource().getBindingContext());
+        const trace=[];
+        if (logLevel=="TRACE" || status == "FAILED"){
+            clearTrace();
+            sap.ui.getCore().byId(`${constants.prefixId}Popover`).close();
+            const busyDialog=new BusyDialog();
+            busyDialog.open();
+            const messageGuid=event.getSource().getModel().getProperty("MessageGuid",event.getSource().getBindingContext());
+            const pages=await cpi.getTraceSteps(messageGuid);
+            if (pages.length>0){
+                const BPMObject=document.querySelector("[id$='--galileiEditorView--galileiEditor']");
+                for (const page of pages){
+                    for(const step of page){                        
+                        const obj=BPMObject.querySelector(`[id$='${step.ModelStepId}'] g .activity,[id$='${step.ModelStepId}'] g .event,[id$='${step.ModelStepId}'] .messageFlow,[id$='${step.ModelStepId}'] g .event,[id$='${step.ModelStepId}'] .gateway`);
+                        if (obj){
+                                obj.style.fill = step.Error?"red":"green";
+                                obj.style.stroke = step.Error?"red":"green";
+                                obj.style.strokeWidth = 6;
+                                const texts=BPMObject.querySelector(`[id$='${step.ModelStepId}']`).querySelectorAll("text");                                
+                                let _name="";
+                                for(const text of texts){
+                                    _name+=text.textContent + " ";
+                                }
+                            if (trace.find(it=>it.ModelStepId==step.ModelStepId)==undefined){
+                                if (obj.classList.values().find(it=>it=="messageFlow")==undefined){//when it is not a channel
+                                    BPMObject.querySelector(`[id$='${step.ModelStepId}']`).setAttribute(`data-${constants.prefixId}ModelStepId`,step.ModelStepId);                                 
+                                    BPMObject.querySelector(`[id$='${step.ModelStepId}']`).setAttribute(`data-${constants.prefixId}name`,_name); 
+                                    BPMObject.querySelector(`[id$='${step.ModelStepId}']`).removeEventListener("dblclick",openTracDetails);               
+                                    BPMObject.querySelector(`[id$='${step.ModelStepId}']`).addEventListener("dblclick",openTracDetails);
+                                }
+                                else{//when it is a channel
+                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].setAttribute(`data-${constants.prefixId}ModelStepId`,step.ModelStepId);                                 
+                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].setAttribute(`data-${constants.prefixId}name`,_name); 
+                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].removeEventListener("dblclick",openTracDetails);               
+                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].addEventListener("dblclick",openTracDetails);
+                                }                                
+                            }                        
+                        }                        
+                        trace.push({
+                            RunId:step.RunId,
+                            ChildCount:step.ChildCount,
+                            ModelStepId:step.ModelStepId,                            
+                            Error:step.Error          
+                        });
+                    }  
+                }           
+            }
+            const oModelTrace=new JSONModel(trace);         
+            sap.ui.getCore().byId(`${constants.prefixId}Popover`).setModel(oModelTrace,"trace");
+            busyDialog.close();
+            busyDialog.destroy();            
+        }
+    }
+
+    const openTracDetails=async(event)=>{
+        const busyDialog=new BusyDialog();
+        busyDialog.open();
+        const traceJson=sap.ui.getCore().byId(`${constants.prefixId}Popover`).getModel("trace").oData;
+        const modelStepId = event.currentTarget.getAttribute(`data-${constants.prefixId}ModelStepId`);        
+        const name = event.currentTarget.getAttribute(`data-${constants.prefixId}name`);        
+        const steps=traceJson.filter(it=>it.ModelStepId==modelStepId);
+        const stepsModel=[];        
+        for (const step in steps){
+            let subSteps=await cpi.getTraceCount(steps[step].RunId,steps[step].ChildCount);            
+            do{            
+                stepsModel.push({
+                    key:`${steps[step].RunId}:${steps[step].ChildCount}:${subSteps-1}`,                    
+                    text:`${steps[step].ChildCount+"."+subSteps}${steps[step].Error ? ' - error' : ''}`
+                });
+                subSteps--;
+            }while(subSteps>0)
+        }
+        
+        let dialogTrace=sap.ui.getCore().byId(`${constants.prefixId}dialogTrace`);        
+        if (dialogTrace)
+            dialogTrace.destroy();
+        dialogTrace=new Dialog(`${constants.prefixId}dialogTrace`,{
+            title: `Trace - ${modelStepId} - ${name}`,
+            contentWidth: "100%",        
+            contentHeight:"100%",
+            verticalScrolling:false,
+            subHeader: new sap.m.Bar({
+                            contentRight:[
+                                new sap.m.ComboBox({
+                                    items: {
+                                        path: "stepsModel>/",
+                                        template: new sap.ui.core.Item({
+                                        text: "{stepsModel>text}",
+                                        key: "{stepsModel>key}"
+                                        })
+                                    },
+                                    change:getTraceDetails,                        
+                                })
+                            ]
+            }),
+            content: new IconTabBar({
+                        stretchContentHeight:true,
+                        visible:false,
+                        items:[
+                            new IconTabFilter({
+                                key:"Headers",
+                                text:"Headers",
+                                content:[
+                                    new sap.m.ScrollContainer({
+                                        height:"100%",
+                                        vertical:true,
+                                        content:[
+                                            new sap.m.Table({
+                                                columns: [
+                                                    new sap.m.Column({
+                                                        header: new sap.m.Text({ text: "Name" })
+                                                    }),
+                                                    new sap.m.Column({
+                                                        header: new sap.m.Text({ text: "Value" })
+                                                    })                                           
+                                                ],
+                                                items: {
+                                                    path: "headerModel>/",
+                                                    template: new sap.m.ColumnListItem({
+                                                        cells: [
+                                                            new sap.m.Text({ text: "{headerModel>name}" }),
+                                                            new sap.m.Text({ text: "{headerModel>value}" })                                                   
+                                                        ]
+                                                    })
+                                                }
+                                            })
+                                        ]
+                                    })
+                                ]
+                            }),
+                            new IconTabFilter({
+                                key:"Properties",
+                                text:"Properties",
+                                content:[                                 
+                                    new sap.m.ScrollContainer({
+                                        height:"100%",
+                                        vertical:true,
+                                        content:[
+                                            new sap.m.Table({
+                                                columns: [
+                                                    new sap.m.Column({
+                                                        header: new sap.m.Text({ text: "Name" })
+                                                    }),
+                                                    new sap.m.Column({
+                                                        header: new sap.m.Text({ text: "Value" })
+                                                    })                                           
+                                                ],
+                                                items: {
+                                                    path: "propertyModel>/",
+                                                    template: new sap.m.ColumnListItem({
+                                                        cells: [
+                                                            new sap.m.Text({ text: "{propertyModel>name}" }),
+                                                            new sap.m.Text({ text: "{propertyModel>value}" })                                                   
+                                                        ]
+                                                    })
+                                                }
+                                            })
+                                        ]
+                                    })
+                                ]
+                            }),
+                            new IconTabFilter({
+                                key:"Body",
+                                text:"Body",
+                                content: new CodeEditor({
+                                    width:"100%",
+                                    height:"100%",
+                                    editable:false,                                    
+                                    colorTheme:"chrome"
+                                })
+                            }),
+                            new IconTabFilter({
+                                key:"Error",
+                                text:"Error",
+                                visible:"{errorModel>/visible}",
+                                content: new Text({
+                                    text:"{errorModel>/error}"
+                                })
+                            })
+                        ]                         
+            }),
+            endButton: new Button({
+                text: "Close",
+                press: ()=>{
+                    dialogTrace.close();
+                    dialogTrace.destroy();                        
+                }
+            })
+        });        
+        dialogTrace.setModel(new JSONModel(stepsModel),"stepsModel")
+        dialogTrace.open();        
+        busyDialog.close();
+        busyDialog.destroy();
+    }
+
+    const clearTrace=()=>{
+        const BPMObject=document.querySelector("[id$='--galileiEditorView--galileiEditor']");
+        let objs=BPMObject.querySelectorAll(`g .activity,g .event,.messageFlow,g .event,.gateway`);
+        for(const obj of objs){
+            obj.style="";            
+        }
+        objs=BPMObject.querySelectorAll(`[data-${constants.prefixId}ModelStepId]`);
+        for(const obj of objs){
+            obj.removeEventListener("click",openTracDetails);
+        }
+    }
+
+    const getTraceDetails=async(event)=>{        
+        const busyDialog=new BusyDialog();
+        busyDialog.open();
+        const dialogTrace=sap.ui.getCore().byId(`${constants.prefixId}dialogTrace`);        
+        const editor=dialogTrace.getAggregation("content")[0].getAggregation("items")[2].getAggregation("content")[0];
+        const runId=event.getSource().getProperty("selectedKey").split(":")[0];
+        const childCount=event.getSource().getProperty("selectedKey").split(":")[1];
+        const subStep=event.getSource().getProperty("selectedKey").split(":")[2];
+        const {header,property,body}=await cpi.getTraceContent(runId,childCount,subStep); 
+        const error=sap.ui.getCore().byId(`${constants.prefixId}Popover`).getModel("trace").oData.filter(it=>it.ChildCount == childCount && it.RunId == runId)[0].Error;        
+        dialogTrace.setModel(new JSONModel(header),"headerModel");
+        dialogTrace.setModel(new JSONModel(property),"propertyModel");        
+        dialogTrace.setModel(new JSONModel({
+            error,
+            visible:error?true:false
+        }),"errorModel");
+        dialogTrace.getAggregation("content")[0].setVisible(true);
+        const {textFormat,type}=utils.prettyPrint(body);
+        editor.setType(type);
+        editor.setValue(textFormat);        
+        busyDialog.close();
+        busyDialog.destroy();
+    }
+
+    const getlastestMessage=async(flowId)=>{
+        const popover=sap.ui.getCore().byId(`${constants.prefixId}Popover`);
+        popover.getAggregation("content")[0].setBusy(true);     
+        const messages=await cpi.getlastestMessage(flowId);
+        const messageModel=new JSONModel(messages.d.results);
+        popover.setModel(messageModel);
+        popover.getAggregation("content")[0].setBusy(false);
+    }
+
+    window.addEventListener("OpenEditor",async(event)=>{
+        if (constants.whereOpenEditor.test(event.detail.clicked)){            
+            const oControl=sap.ui.getCore().byId(event.detail.clicked.split("-")[0]);
+            if (oControl){
+                let payload;
+                if (oControl instanceof sap.m.MessageStrip)
+                    payload=await cpi.getPayloadTrace(oControl.getModel().getProperty("/currTrace/id"));
+                else
+                    payload=oControl instanceof Text?oControl.getProperty("text"):oControl.getProperty("value");
+                openEditorDialog(payload);
+            }
+        }
+    });
+
+    window.onbeforeunload=(event)=>{
+        if ($.sap.busy){        
+            event.returnValue = true;
+            event.preventDefault();
+        }
+    }
+    return {
+        usedList:()=>{
+            let dialog=sap.ui.getCore().byId(`${constants.prefixId}usedListDialog`);
+            if (!dialog){
+                dialog=new Dialog(`${constants.prefixId}usedListDialog`,{
+                    title: `Where-Used List`,
+                    contentWidth: "50%",        
+                    contentHeight:"50%",
+                    verticalScrolling:false,
+                    content: [
+                        new VBox({
+                            items:[
+                                new HBox({
+                                    items:[
+                                        new InputListItem({
+                                            label:"Word to find",
+                                            content:[
+                                                new Input({
+                                                    type:"Text",                                                    
+                                                    liveChange:(event)=>{
+                                                        if (event.getSource().getValue()=="")
+                                                            event.getSource().getParent().getParent().getAggregation("items")[2].setProperty("enabled",false);
+                                                        else
+                                                            event.getSource().getParent().getParent().getAggregation("items")[2].setProperty("enabled",true);
+                                                    }
+                                                })
+                                            ]
+                                        }),
+                                        new InputListItem({
+                                            label:"Include references",
+                                            content:[
+                                                new CheckBox()
+                                            ]
+                                        }),
+                                        new Button({
+                                            text:"Search",
+                                            enabled:false,
+                                            press:(event)=>{
+                                                const oModel=new JSONModel([]);
+                                                sap.ui.getCore().byId(`${constants.prefixId}usedListDialog`).setModel(oModel);
+                                                event.getSource().setProperty("enabled",false);
+                                                const indicator=event.getSource().getParent().getParent().getAggregation("items")[1];
+                                                const ProgressIndicator=(event)=>{        
+                                                    event.detail.percentage = Math.round(event.detail.percentage);                                        
+                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListIndicator`).setProperty("displayValue",`${event.detail.percentage}%`)
+                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListIndicator`).setProperty("percentValue",event.detail.percentage)                                                                                                
+                                                }
+                                                window.addEventListener("CPI",ProgressIndicator);
+                                                const world=event.getSource().getParent().getAggregation("items")[0].getAggregation("content")[0].getValue();
+                                                const references=event.getSource().getParent().getAggregation("items")[1].getAggregation("content")[0].getSelected();                                                
+                                                cpi.usedListObjectsCPI(world,references).then((result)=>{
+                                                    const oModel=new JSONModel(result);
+                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListDialog`).setModel(oModel);
+                                                    MessageBox.information("Used list search has terminated");
+                                                }).catch((error)=>{
+                                                    console.log(error);                 
+                                                    MessageBox.error(error);                                       
+                                                }).finally(()=>{
+                                                    window.removeEventListener("CPI",ProgressIndicator);
+                                                    event.getSource().setProperty("enabled",true);
+                                                })
+                                            }
+                                        })
+                                    ]
+                                }),
+                                new ProgressIndicator(`${constants.prefixId}usedListIndicator`,{
+                                    percentValue:"0",
+                                    displayValue:"0%",
+                                    state:"Information"
+                                    
+                                }),
+                                new HBox({
+                                    items:[
+                                        new Table({
+                                            columns:[
+                                                new Column({
+                                                    header:new Text({text:"Package"}),
+                                                }),
+                                                new Column({
+                                                    header:new Text({text:"Iflow"}),
+                                                }),
+                                                new Column({
+                                                    header:new Text({text:"Link"}),
+                                                }),
+                                            ],
+                                            items:{
+                                                path: "/",
+                                                template:new ColumnListItem({
+                                                    cells:[
+                                                        new Text({text:"{package}"}),
+                                                        new Text({text:"{iflow}"}),                                                    
+                                                        new sap.m.Link({text:"Go to",href:"{link}",target:"_blank"})
+                                                    ]
+                                                })
+                                            }
+                                        })
+                                    ]
+                                })
+                            ]
+                        })
+                    ],
+                    endButton: new Button({
+                        text: "Close",
+                        press: ()=>{
+                            dialog.close();
+                        }
+                    })
+                });            
+            }            
+            dialog.open();
+        },
+        activateTrace:async (event)=>{
+            const id=event.getSource().getModel().oData.defaultIntegrationFlowModel.allAttributes.bundleId.value;
+            if (await cpi.activeTrace(id)==200)
+                MessageBox.information('Trace has been activated successful');
+            else
+                MessageBox.error('there is an error activing trace');            
+            counterTimer = 10;
+        },
+        openMessages:async(event)=>{
+            const flowId=event.getSource().getModel().oData.defaultIntegrationFlowModel.allAttributes.bundleId.value
+            let popover=sap.ui.getCore().byId(`${constants.prefixId}Popover`);
+            if (!popover){
+                popover=new sap.m.Popover(`${constants.prefixId}Popover`,{
+                    title: `Latest messages`,
+                    placement:"Bottom",
+                    contentWidth: "500px",
+                    contentHeight:"600px",                
+                    content:[                    
+                        new Table({
+                                columns:[
+                                    new Column({
+                                        header:new Text({text:"Date time"}),
+                                    }),
+                                    new Column({
+                                        header:new Text({text:"Time"}),
+                                    }),
+                                    new Column({
+                                        header:new Text({text:"Status"}),
+                                    }),
+                                    new Column({
+                                        header:new Text({text:"Log level"}),
+                                    }),
+                                    new Column({
+                                        header:new Text({text:"Tools"}),
+                                    })
+                                ],
+                                items:{
+                                    path: "/",
+                                    template:new ColumnListItem({
+                                        cells:[
+                                            new Text({text:"{LogStart}"}),
+                                            new Text({text:"{Time}"}),
+                                            new ObjectStatus({state:"{state}",text:"{Status}",tooltip:"{error}"}),
+                                            new Text({text:"{LogLevel}"}),
+                                            new HBox({
+                                                items:[
+                                                    new Button({enabled:"{enabled}",tooltip:"Draw trace",icon:"sap-icon://chevron-phase-2",press:openTrace}),
+                                                    new Button({tooltip:"Open trace",icon:"sap-icon://open-command-field",press:cpi.openTrace})
+                                                ]
+                                            })
+                                        ]
+                                    })
+                                }
+                            },
+                        )],
+                    customHeader: new HBox({
+                        items:[
+                            new Button({
+                                text: "Refresh",
+                                icon:"sap-icon://refresh",
+                                press:()=>{                                    
+                                    getlastestMessage(flowId);
+                                }                                
+                            }),
+                            new Button({
+                                text: "Clear",
+                                icon:"sap-icon://clear-all",
+                                press: ()=>{        
+                                    clearTrace();
+                                }                                
+                            }),
+                            new Button({
+                                text: "Open Messages",
+                                icon:"sap-icon://open-command-field",
+                                press: ()=>{        
+                                    cpi.openLogTab(flowId);                              
+                                }
+                            })
+                        ]
+                    })                    
+                });
+            }  
+            getlastestMessage(flowId);
+            popover.openBy(event.getSource());
+        },     
+        info:(event)=>{         
+            let quickViewInfo=sap.ui.getCore().byId(`${constants.prefixId}QuickView`);
+            if (!quickViewInfo){
+                quickViewInfo = new QuickView(`${constants.prefixId}QuickView`,{
+                    placement:"Left",
+                    pages:[
+                        new QuickViewPage({
+                            header:"Information",
+                            groups:[
+                                new QuickViewGroup({
+                                    elements:{
+                                        path:"/",
+                                        template:
+                                                new QuickViewGroupElement({
+                                                    label:"{label}",
+                                                    value:"{value}",
+                                                    url:"{url}",
+                                                    type:"{elementType}",
+                                                    pageLinkId:"{pageLinkId}",
+                                                    emailSubject:"{emailSubject}",
+                                                    target:"{target}"
+                                                })                                            
+                                        }                                                 
+                                })
+                            ]
+                            }
+                        )
+                    ]
+                });                
+            }
+            quickViewInfo.setModel(event.getSource().getModel("infoIflow"));
+            quickViewInfo.openBy(event.getSource());
+        },      
+        viewDetailsCredential:async(event)=>{
+            $.sap.busy=true;
+            const busyDialog=new BusyDialog(`${constants.prefixId}busyDialog`,{
+                title:"Credential details",
+                text:"wait..."
+            });
+            busyDialog.open();
+            const updateText=(event)=>{
+                busyDialog.setText(event.detail.message);
+            }            
+            window.addEventListener("CPI",updateText);
+            const id=event.getSource().getModel().getProperty("name",event.getSource().getBindingContext());            
+            const details=await cpi.getSecurityMaterialSimulate(id);
+            busyDialog.close();
+            window.removeEventListener("CPI",updateText);
+            busyDialog.destroy();
+            if (details==null){
+                MessageToast.show("Error cannot get credential");
+            }
+            else{
+                const jsonDetails = [];
+                for(const detail of Object.entries(details)){
+                    if (!["CamelMessageHistory","CamelToEndpoint","artifact.description"].includes(detail[0]))
+                    jsonDetails.push({
+                        key:detail[0],
+                        value:detail[1]
+                    })
+                }
+                const jModelDetails=new JSONModel(jsonDetails);
+                const dialog=new Dialog(`${constants.prefixId}Dialog`,{
+                    title: `Credential details - ${id}`,
+                    contentWidth: "500px",                
+                    content: new Table({
+                                columns:[
+                                    new Column({
+                                        header:new Text({text:"Property"}),
+                                    }),
+                                    new Column({
+                                        header:new Text({text:"Value"}),
+                                    })
+                                ],
+                                items:{
+                                    path: "/",
+                                    template:new ColumnListItem({
+                                        cells:[
+                                            new Text({text:"{key}"}),
+                                            new Text({text:"{value}"})
+                                        ]
+                                    })
+                                }
+                            }
+                    ),
+                    endButton: new Button({
+                        text: "Close",
+                        press: ()=>{
+                            dialog.close();
+                            dialog.destroy();                        
+                        }
+                    })
+                });
+                dialog.setModel(jModelDetails);
+                dialog.open();
+            }
+            $.sap.busy=false;
+            return details;
+        },
+        viewNanageKeystore:(event)=>{
+            //openssl pkcs12 -export -out Cert.p12 -in cert.pem -inkey key.pem -passin pass:root -passout pass:root 
+            $.sap.busy=true;
+            const dialog=new Dialog(`${constants.prefixId}dialog`,{                
+                title: "Confirm",
+                content: new Text({ text: "How would you like to download the certificate?" }),
+                beginButton: new Button({                    
+                    text: "One File",
+                    press: function () {                        
+                        dialog.close();
+                        dialog.destroy();
+                        downloadFIle(1);
+                    }.bind(this)
+                }),
+                endButton: new Button({
+                    text: "Two file",
+                    press: function () {
+                        dialog.close();
+                        dialog.destroy();
+                        downloadFIle(2);
+                    }.bind(this)
+                })
+            });
+            dialog.open();
+            const downloadFIle=async(files)=>{
+                const busyDialog=new BusyDialog(`${constants.prefixId}busyDialog`,{
+                    title:"Download key pair",
+                    text:"wait..."
+                });
+                busyDialog.open();
+                const updateText=(event)=>{
+                    busyDialog.setText(event.detail.message);
+                }            
+                window.addEventListener("CPI",updateText);
+                const id=event.getSource().getModel("FromOData").getProperty("Alias",event.getSource().getBindingContext("FromOData"));
+                const details=await cpi.getkeyPairSimulate(id);                
+                busyDialog.close();
+                window.removeEventListener("CPI",updateText);
+                busyDialog.destroy();
+                if (details==null){
+                    MessageToast.show("Error cannot get keypair");
+                }
+                else{
+                    if (files==1){
+                        const file=`-----BEGIN PRIVATE KEY-----\n${details.key}\n-----END PRIVATE KEY-----\n-----BEGIN CERTIFICATE-----\n${details.cert}\n-----END CERTIFICATE-----`;
+                        const blob = new Blob([file], { type: 'text/plain' });            
+                        const link = document.createElement('a');            
+                        link.download = `${details.keyPairName}.pem`;            
+                        link.href = URL.createObjectURL(blob);            
+                        document.body.appendChild(link);            
+                        link.click();            
+                        document.body.removeChild(link);
+                    }
+                    else{
+                        const key=`-----BEGIN PRIVATE KEY-----\n${details.key}\n-----END PRIVATE KEY-----`;
+                        const cert=`-----BEGIN CERTIFICATE-----\n${details.cert}\n-----END CERTIFICATE-----`;
+                        const blobKey = new Blob([key], { type: 'text/plain' });            
+                        const blobCert = new Blob([cert], { type: 'text/plain' });            
+                        let link = document.createElement('a');            
+                        link.download = `${details.keyPairName}_key.pem`;            
+                        link.href = URL.createObjectURL(blobKey);            
+                        document.body.appendChild(link);            
+                        link.click();            
+                        document.body.removeChild(link);
+                        link = document.createElement('a');            
+                        link.download = `${details.keyPairName}_cert.pem`;            
+                        link.href = URL.createObjectURL(blobCert);            
+                        document.body.appendChild(link);            
+                        link.click();            
+                        document.body.removeChild(link);
+                    }
+                }
+            }
+            $.sap.busy=false;    
+        },
+        updateTraceStatus:(id,iflowId)=>{            
+                updateTraceStatusTImer(id,iflowId);
+        }
+    };
+});
