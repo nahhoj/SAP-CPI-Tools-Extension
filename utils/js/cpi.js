@@ -244,7 +244,7 @@ sap.ui.define([
         },
         activeTrace:async (idFlow)=>{
             const url=`${constants.apiBaseURLCPI}${constants.serviceURL.logLevel}`;
-            const body=`{"artifactSymbolicName":"${idFlow}","mplLogLevel":"TRACE","nodeType":"IFLMAP"}`
+            const body=`{"artifactSymbolicName":"${idFlow}","mplLogLevel":"TRACE","nodeType":"IFLMAP","runtimeLocationId": "cloudintegration"}`
             let headers=[{"Content-Type":"application/json"}];
             let status;
             try {
@@ -287,7 +287,7 @@ sap.ui.define([
             let status,traceExpires,deployState,state,logLevel;
             let endPointInfo=[];
             let packageInfo=[];
-            const url=`${constants.apiBaseURLCPI}${constants.serviceURL.listDetailsIflow}?artifactId=${id}`;
+            const url=`${constants.apiBaseURLCPI}${constants.serviceURL.listDetailsIflow}?artifactId=${id}&runtimeLocationId=cloudintegration`;
             let response;
             try {
                 response=await net.callService(url,"GET",[],null,false);
