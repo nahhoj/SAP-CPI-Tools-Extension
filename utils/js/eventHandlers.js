@@ -45,8 +45,8 @@ sap.ui.define([
             if (textDescription!=''){
                 if (counterTimer>=10){
                     counterTimer=0;
-                    const iflowIdUIDD=await cpi.getFlowId(iflowId);
-                    let {status,traceExpires,endPointInfo,packageInfo,deployState,state,logLevel}=await cpi.getIflowSTraceStatus(iflowIdUIDD);
+                    const {id,runtimeLocationId}=await cpi.getFlowId(iflowId);
+                    let {status,traceExpires,endPointInfo,packageInfo,deployState,state,logLevel}=await cpi.getIflowSTraceStatus(id,runtimeLocationId);
                     if (packageInfo.length==0)
                         packageInfo=await cpi.getPackage(iflowId);
                     _status = status == "true"?true:false;
@@ -189,14 +189,11 @@ sap.ui.define([
         const steps=traceJson.filter(it=>it.ModelStepId==modelStepId);
         const stepsModel=[];        
         for (const step in steps){
-            let subSteps=await cpi.getTraceCount(steps[step].RunId,steps[step].ChildCount);            
-            do{            
-                stepsModel.push({
-                    key:`${steps[step].RunId}:${steps[step].ChildCount}:${subSteps-1}`,                    
-                    text:`${steps[step].ChildCount+"."+subSteps}${steps[step].Error ? ' - error' : ''}`
-                });
-                subSteps--;
-            }while(subSteps>0)
+            stepsModel.push({
+                key:`${steps[step].RunId}:${steps[step].ChildCount}`,                    
+                text:`${steps[step].ChildCount}${steps[step].Error ? ' - error' : ''}`
+            });
+                
         }
         
         let dialogTrace=sap.ui.getCore().byId(`${constants.prefixId}dialogTrace`);        
@@ -340,8 +337,8 @@ sap.ui.define([
         const editor=dialogTrace.getAggregation("content")[0].getAggregation("items")[2].getAggregation("content")[0];
         const runId=event.getSource().getProperty("selectedKey").split(":")[0];
         const childCount=event.getSource().getProperty("selectedKey").split(":")[1];
-        const subStep=event.getSource().getProperty("selectedKey").split(":")[2];
-        const {header,property,body}=await cpi.getTraceContent(runId,childCount,subStep); 
+        //const subStep=event.getSource().getProperty("selectedKey").split(":")[2];
+        const {header,property,body}=await cpi.getTraceContent(runId,childCount,0); 
         const error=sap.ui.getCore().byId(`${constants.prefixId}Popover`).getModel("trace").oData.filter(it=>it.ChildCount == childCount && it.RunId == runId)[0].Error;        
         dialogTrace.setModel(new JSONModel(header),"headerModel");
         dialogTrace.setModel(new JSONModel(property),"propertyModel");        
@@ -394,7 +391,7 @@ sap.ui.define([
                     title: `Where-Used List`,
                     contentWidth: "50%",        
                     contentHeight:"50%",
-                    verticalScrolling:false,
+                    verticalScrolling:true,
                     content: [
                         new VBox({
                             items:[
@@ -498,8 +495,10 @@ sap.ui.define([
             dialog.open();
         },
         activateTrace:async (event)=>{
+            debugger
             const id=event.getSource().getModel().oData.defaultIntegrationFlowModel.allAttributes.bundleId.value;
-            if (await cpi.activeTrace(id)==200)
+            const {runtimeLocationId}=await cpi.getFlowId(id);            
+            if (await cpi.activeTrace(id,runtimeLocationId)==200)
                 MessageBox.information('Trace has been activated successful');
             else
                 MessageBox.error('there is an error activing trace');            

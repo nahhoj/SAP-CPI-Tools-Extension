@@ -242,9 +242,9 @@ sap.ui.define([
             }
             return count
         },
-        activeTrace:async (idFlow)=>{
+        activeTrace:async (idFlow,runtimeLocationId)=>{
             const url=`${constants.apiBaseURLCPI}${constants.serviceURL.logLevel}`;
-            const body=`{"artifactSymbolicName":"${idFlow}","mplLogLevel":"TRACE","nodeType":"IFLMAP","runtimeLocationId": "cloudintegration"}`
+            const body=`{"artifactSymbolicName":"${idFlow}","mplLogLevel":"TRACE","nodeType":"IFLMAP","runtimeLocationId": "${runtimeLocationId}"}`
             let headers=[{"Content-Type":"application/json"}];
             let status;
             try {
@@ -266,8 +266,9 @@ sap.ui.define([
             }   
             return payload;
         },
-        getFlowId:async (iflowName)=>{
+        getFlowId:async (iflowName)=>{            
             let id=null;
+            let runtimeLocationId=null;
             const url=`${constants.apiBaseURLCPI}${constants.serviceURL.listIflow}`;
             let response;
             try {
@@ -280,14 +281,15 @@ sap.ui.define([
             for(const artifactInformation of xml.querySelectorAll("artifactInformations")){
                 if (artifactInformation.querySelector("symbolicName").textContent == iflowName)
                     id=artifactInformation.querySelector("id").textContent;
+                    runtimeLocationId=artifactInformation.querySelector("runtimeLocationId").textContent;
             }
-            return id;
+            return {id,runtimeLocationId};
         },
-        getIflowSTraceStatus:async(id)=>{
+        getIflowSTraceStatus:async(id,runtimeLocationId)=>{            
             let status,traceExpires,deployState,state,logLevel;
             let endPointInfo=[];
             let packageInfo=[];
-            const url=`${constants.apiBaseURLCPI}${constants.serviceURL.listDetailsIflow}?artifactId=${id}&runtimeLocationId=cloudintegration`;
+            const url=`${constants.apiBaseURLCPI}${constants.serviceURL.listDetailsIflow}?artifactId=${id}&runtimeLocationId=${runtimeLocationId}`;            
             let response;
             try {
                 response=await net.callService(url,"GET",[],null,false);

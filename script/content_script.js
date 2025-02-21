@@ -32,12 +32,12 @@ window.startProcess=()=>{
                 "utils"
             ], function (ui,utils){
                 const process=()=>{
-                    let id;    
-                    //open Announcements Extension                    
-                    ui.Announcements();
+                    let id;                        
                     //Add Header
                     if (sap.ui.getCore().byId("shell--toolHeader")){
                         ui.header("shell--toolHeader");
+                        //open Announcements Extension                    
+                        ui.Announcements();
                     }
             
                     //Add buttons and counter trace in designer flow section    

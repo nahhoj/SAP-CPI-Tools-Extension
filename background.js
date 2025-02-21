@@ -1,6 +1,7 @@
 'use strict'
+const _browser=chrome || browser;
 
-chrome.tabs.onUpdated.addListener(async(tabId,changeInfo,tab)=>{
+_browser.tabs.onUpdated.addListener(async(tabId,changeInfo,tab)=>{
     if (changeInfo.status === 'complete' && tab.url){
         const regex1 = /^https:\/\/.*\.hana\.ondemand\.com\/itspaces\/shell\/.*/;
         const regex2 = /^https:\/\/.*\.hana\.ondemand\.com\/shell\/.*/;
@@ -28,20 +29,20 @@ chrome.tabs.onUpdated.addListener(async(tabId,changeInfo,tab)=>{
                 }
             });*/
             try {
-                await chrome.tabs.sendMessage(tabId,{action:'checkInjected'});                
+                await _browser.tabs.sendMessage(tabId,{action:'checkInjected'});                
             } catch (error) {                
                 console.log("injecting files...")                
                 try {
-                    await chrome.scripting.executeScript({
+                    await _browser.scripting.executeScript({
                         target: { tabId },
                         files: ['script/auxiliary_script.js']
                     });
-                    await chrome.scripting.executeScript({
+                    await _browser.scripting.executeScript({
                         target: { tabId },
                         files: ['script/content_script.js'],            
                         world: 'MAIN'
                     });
-                    await chrome.scripting.insertCSS({
+                    await _browser.scripting.insertCSS({
                         target: { tabId },
                         files: ["utils/css/styles.css"]
                     });
@@ -54,16 +55,16 @@ chrome.tabs.onUpdated.addListener(async(tabId,changeInfo,tab)=>{
     }        
 });
 
-chrome.contextMenus.onClicked.addListener((e,tab)=>{        
-        chrome.tabs.sendMessage(tab.id,{
+_browser.contextMenus.onClicked.addListener((e,tab)=>{        
+    _browser.tabs.sendMessage(tab.id,{
             tabId:tab.id,
             action: 'clickContextMenu',
             button:e.menuItemId
         });
 });
 
-chrome.runtime.onInstalled.addListener(function () {         
-    chrome.contextMenus.create({
+_browser.runtime.onInstalled.addListener(function () {         
+    _browser.contextMenus.create({
         id: 'Prettyprinter',
         title: 'Pretty printer',
         documentUrlPatterns:[
