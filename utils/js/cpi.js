@@ -517,11 +517,11 @@ sap.ui.define([
                         }    
                         countArtifacts++;
                         percentageArtifacts=((countArtifacts/lenArtifacts)*(1/len)*100) + percentage;
-                        utils.fireEvent("CPI",{percentage:percentageArtifacts,state:"process"});
+                        utils.fireEvent("CPI",{percentage:percentageArtifacts,state:"process",result});
                     }
                     count++;
                     percentage=(count/len)*100;
-                    utils.fireEvent("CPI",{percentage,state:"process"});
+                    utils.fireEvent("CPI",{percentage,state:"process",result});
                 }
                 utils.fireEvent("CPI",{percentage,state:"end"});
                 resolve(result);

@@ -421,20 +421,22 @@ sap.ui.define([
                                             text:"Search",
                                             enabled:false,
                                             press:(event)=>{
-                                                const oModel=new JSONModel([]);
+                                                let oModel=new JSONModel([]);
                                                 sap.ui.getCore().byId(`${constants.prefixId}usedListDialog`).setModel(oModel);
                                                 event.getSource().setProperty("enabled",false);
                                                 const indicator=event.getSource().getParent().getParent().getAggregation("items")[1];
                                                 const ProgressIndicator=(event)=>{        
                                                     event.detail.percentage = Math.round(event.detail.percentage);                                        
-                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListIndicator`).setProperty("displayValue",`${event.detail.percentage}%`)
-                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListIndicator`).setProperty("percentValue",event.detail.percentage)                                                                                                
+                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListIndicator`).setProperty("displayValue",`${event.detail.percentage}%`);
+                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListIndicator`).setProperty("percentValue",event.detail.percentage);
+                                                    oModel=new JSONModel(event.detail.result);
+                                                    sap.ui.getCore().byId(`${constants.prefixId}usedListDialog`).setModel(oModel);                                                                                         
                                                 }
                                                 window.addEventListener("CPI",ProgressIndicator);
                                                 const world=event.getSource().getParent().getAggregation("items")[0].getAggregation("content")[0].getValue();
                                                 const references=event.getSource().getParent().getAggregation("items")[1].getAggregation("content")[0].getSelected();                                                
                                                 cpi.usedListObjectsCPI(world,references).then((result)=>{
-                                                    const oModel=new JSONModel(result);
+                                                    oModel=new JSONModel(result);
                                                     sap.ui.getCore().byId(`${constants.prefixId}usedListDialog`).setModel(oModel);
                                                     MessageBox.information("Used list search has terminated");
                                                 }).catch((error)=>{
