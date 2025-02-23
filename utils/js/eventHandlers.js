@@ -149,19 +149,11 @@ sap.ui.define([
                                 for(const text of texts){
                                     _name+=text.textContent + " ";
                                 }
-                            if (trace.find(it=>it.ModelStepId==step.ModelStepId)==undefined){
-                                if (obj.classList.values().find(it=>it=="messageFlow")==undefined){//when it is not a channel
+                            if (trace.find(it=>it.ModelStepId==step.ModelStepId)==undefined){                                
                                     BPMObject.querySelector(`[id$='${step.ModelStepId}']`).setAttribute(`data-${constants.prefixId}ModelStepId`,step.ModelStepId);                                 
                                     BPMObject.querySelector(`[id$='${step.ModelStepId}']`).setAttribute(`data-${constants.prefixId}name`,_name); 
                                     BPMObject.querySelector(`[id$='${step.ModelStepId}']`).removeEventListener("dblclick",openTracDetails);               
-                                    BPMObject.querySelector(`[id$='${step.ModelStepId}']`).addEventListener("dblclick",openTracDetails);
-                                }
-                                else{//when it is a channel
-                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].setAttribute(`data-${constants.prefixId}ModelStepId`,step.ModelStepId);                                 
-                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].setAttribute(`data-${constants.prefixId}name`,_name); 
-                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].removeEventListener("dblclick",openTracDetails);               
-                                    BPMObject.querySelectorAll(`[id$='${step.ModelStepId}'] path`)[1].addEventListener("dblclick",openTracDetails);
-                                }                                
+                                    BPMObject.querySelector(`[id$='${step.ModelStepId}']`).addEventListener("dblclick",openTracDetails);                                                               
                             }                        
                         }                        
                         trace.push({
@@ -192,8 +184,7 @@ sap.ui.define([
             stepsModel.push({
                 key:`${steps[step].RunId}:${steps[step].ChildCount}`,                    
                 text:`${steps[step].ChildCount}${steps[step].Error ? ' - error' : ''}`
-            });
-                
+            });                
         }
         
         let dialogTrace=sap.ui.getCore().byId(`${constants.prefixId}dialogTrace`);        
@@ -206,14 +197,26 @@ sap.ui.define([
             verticalScrolling:false,
             subHeader: new sap.m.Bar({
                             contentRight:[
+                                new sap.m.Label({text: "Step"}),
                                 new sap.m.ComboBox({
                                     items: {
                                         path: "stepsModel>/",
                                         template: new sap.ui.core.Item({
-                                        text: "{stepsModel>text}",
-                                        key: "{stepsModel>key}"
+                                            text: "{stepsModel>text}",
+                                            key: "{stepsModel>key}"
                                         })
                                     },
+                                    change:getTraceDetails,                        
+                                }),
+                                new sap.m.ComboBox({
+                                    items: {
+                                        path: "subStepsModel>/",
+                                        template: new sap.ui.core.Item({
+                                            text: "{subStepsModel>text}",
+                                            key: "{subStepsModel>key}"
+                                        })
+                                    },
+                                    visible:false,
                                     change:getTraceDetails,                        
                                 })
                             ]
@@ -312,7 +315,7 @@ sap.ui.define([
                 }
             })
         });        
-        dialogTrace.setModel(new JSONModel(stepsModel),"stepsModel")
+        dialogTrace.setModel(new JSONModel(stepsModel),"stepsModel");
         dialogTrace.open();        
         busyDialog.close();
         busyDialog.destroy();
@@ -330,15 +333,42 @@ sap.ui.define([
         }
     }
 
-    const getTraceDetails=async(event)=>{        
+    const getTraceDetails=async(event)=>{ 
         const busyDialog=new BusyDialog();
         busyDialog.open();
         const dialogTrace=sap.ui.getCore().byId(`${constants.prefixId}dialogTrace`);        
         const editor=dialogTrace.getAggregation("content")[0].getAggregation("items")[2].getAggregation("content")[0];
-        const runId=event.getSource().getProperty("selectedKey").split(":")[0];
-        const childCount=event.getSource().getProperty("selectedKey").split(":")[1];
-        //const subStep=event.getSource().getProperty("selectedKey").split(":")[2];
-        const {header,property,body}=await cpi.getTraceContent(runId,childCount,0); 
+        let runId;
+        let childCount;
+        let subStep;
+        if (event.getSource().getBindingInfo("items").model=="stepsModel"){
+            runId=event.getSource().getProperty("selectedKey").split(":")[0];
+            childCount=event.getSource().getProperty("selectedKey").split(":")[1];
+            subStep=0;
+        }
+        else{
+            runId=dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[1].getProperty("selectedKey").split(":")[0];
+            childCount=dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[1].getProperty("selectedKey").split(":")[1];
+            subStep=event.getSource().getProperty("selectedKey");
+        }
+        const {header,property,body,count}=await cpi.getTraceContent(runId,childCount,subStep); 
+        if (count>1){
+            const subSteps=[];            
+            for (let x=count-1;x>=0;x--){
+                subSteps.push({
+                    key:`${x}`,                    
+                    text:`${x+1}`
+                });                
+            }
+            dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[0].setText("Step / Substep");
+            dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[2].setSelectedKey(subStep)
+            dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[2].setVisible(true);
+            dialogTrace.setModel(new JSONModel(subSteps),"subStepsModel");
+        }
+        else{
+            dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[0].setText("Step");
+            dialogTrace.getAggregation("subHeader").getAggregation("contentRight")[2].setVisible(false);
+        }
         const error=sap.ui.getCore().byId(`${constants.prefixId}Popover`).getModel("trace").oData.filter(it=>it.ChildCount == childCount && it.RunId == runId)[0].Error;        
         dialogTrace.setModel(new JSONModel(header),"headerModel");
         dialogTrace.setModel(new JSONModel(property),"propertyModel");        
@@ -364,18 +394,22 @@ sap.ui.define([
     }
 
     window.addEventListener("OpenEditor",async(event)=>{
-        if (constants.whereOpenEditor.test(event.detail.clicked)){            
+        if (constants.whereOpenEditor.test(event.detail.clicked)){ 
             const oControl=sap.ui.getCore().byId(event.detail.clicked.split("-")[0]);
             if (oControl){
+                const busyDialog=new BusyDialog();
+                busyDialog.open();
                 let payload;
                 if (oControl instanceof sap.m.MessageStrip)
                     payload=await cpi.getPayloadTrace(oControl.getModel().getProperty("/currTrace/id"));
                 else
                     payload=oControl instanceof Text?oControl.getProperty("text"):oControl.getProperty("value");
                 openEditorDialog(payload);
+                busyDialog.close();
+                busyDialog.destroy();
             }
         }
-    });
+    });    
 
     window.onbeforeunload=(event)=>{
         if ($.sap.busy){        
@@ -496,8 +530,7 @@ sap.ui.define([
             }            
             dialog.open();
         },
-        activateTrace:async (event)=>{
-            debugger
+        activateTrace:async (event)=>{            
             const id=event.getSource().getModel().oData.defaultIntegrationFlowModel.allAttributes.bundleId.value;
             const {runtimeLocationId}=await cpi.getFlowId(id);            
             if (await cpi.activeTrace(id,runtimeLocationId)==200)

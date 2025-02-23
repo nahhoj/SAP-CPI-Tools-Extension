@@ -59,7 +59,7 @@ window.startProcess=()=>{
                     if (document.querySelector("[id$='---com.sap.it.op.web.ui.pages.keystore.KeystoreManagement--KEYSTOREMANAGEMENT_TABLE_ID']") && (id=document.querySelector("[id$='---com.sap.it.op.web.ui.pages.keystore.KeystoreManagement--KEYSTOREMANAGEMENT_TABLE_ID']").id)){
                         ui.manageKeystore(id);
                     }
-                    setTimeout(()=>process(), 250);
+                    setTimeout(()=>process(), 250);                    
                 }
                 setTimeout(()=>process(),500);
             });

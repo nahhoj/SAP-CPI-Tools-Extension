@@ -201,10 +201,12 @@ sap.ui.define([
             let response;
             const header=[];
             const property=[];
-            let body="";            
+            let body="";    
+            let count=0;        
             try {
                 response = await net.callService(url,"GET",[],null,false);
                 const traceId=JSON.parse(response.body).d.results[subStep].TraceId;
+                count=JSON.parse(response.body).d.results.length;
                 const urlHeader=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/TraceMessages(${traceId}L)/Properties?$format=json`; 
                 const urlProperty=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/TraceMessages(${traceId}L)/ExchangeProperties?$format=json`; 
                 const urlbody=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/TraceMessages(${traceId}L)/$value`;
@@ -228,7 +230,7 @@ sap.ui.define([
                 body=response.body;
             }
             catch(error){}
-            return {header,property,body}
+            return {header,property,body,count}
         },
         getTraceCount:async(runId,ChildCount)=>{
             const url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogRunSteps(RunId='${runId}',ChildCount=${ChildCount})/TraceMessages?$format=json`;         
