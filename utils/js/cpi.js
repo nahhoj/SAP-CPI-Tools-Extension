@@ -283,7 +283,7 @@ sap.ui.define([
             for(const artifactInformation of xml.querySelectorAll("artifactInformations")){
                 if (artifactInformation.querySelector("symbolicName").textContent == iflowName)
                     id=artifactInformation.querySelector("id").textContent;
-                    runtimeLocationId=artifactInformation.querySelector("runtimeLocationId").textContent;
+                    runtimeLocationId=artifactInformation.querySelector("runtimeLocationId")?.textContent;
             }
             return {id,runtimeLocationId};
         },
