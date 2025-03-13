@@ -13,6 +13,7 @@ This extension was developed as a hobby in my free time, but now I use it in my 
 - **iFlow Info**: Added an Info button in the Design Editor to show important details about the iFlow.
 - **Messages Button**: In the Design Editor, added a button to display the latest messages, allowing you to open the trace or view messages for each step by drawing it in the iFlow design.
 - **Where used list**: Added a button in the header to search for any word in all iFlows.
+- **Find in attachment**: Added a function to search attachments in an IFlow.
 
 ## Installation Instructions
 1. Open your Chrome browser and navigate to the following link:  

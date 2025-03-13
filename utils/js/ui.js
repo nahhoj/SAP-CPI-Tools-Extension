@@ -160,7 +160,7 @@ sap.ui.define(
                     draggable:false,
                     content:new HTML({
                         content:`<div><p style="text-align: center;"><strong>WELCOME TO SAP CPI Tools Extension</strong></p>
-    <p>To learn more about this extension, please visit the repository on GitHub: <a href="https://github.com/nahhoj/SAP-CPI-Tools-Extension" target="_blank" rel="noopener"><em>SAP CPI Tools Extension</em></a>. This extension was developed as a hobby in my free time, but I now use it in my job, and it has been very useful to me. I&rsquo;ve been working with SAP CPI for 5 years and have always wanted to build tools that improve the user experience in SAP CPI. As a result, I&rsquo;ve added some small functionalities to help build and check iFlows.</p>
+    <p>To learn more about this extension, please visit the repository on GitHub: <a href="https://github.com/nahhoj/SAP-CPI-Tools-Extension" target="_blank" rel="noopener"><em>SAP CPI Tools Extension</em></a>. This extension was developed as a hobby in my free time, but I now use it in my job, and it has been very useful to me. I have always wanted to build tools that improve the user experience in SAP CPI. As a result, I&rsquo;ve added some small functionalities to help build and check iFlows.</p>
     <p><strong>Here are some of the features:</strong></p>
     <ul>
     <li>Added information about the logged-in user and the environment being used.</li>
@@ -171,6 +171,7 @@ sap.ui.define(
     <li>Added a Trace button in the Design Editor for the iFlow to enable trace activation.</li>
     <li>Added an Info button in the Design Editor to display important information about the iFlow.</li>
     <li>Added a Messages button in the Design Editor to show the latest messages, allowing you to open the trace or view the message for each step by clicking it in the iFlow design.</li>
+    <li>Added a 'Messages' button in the Design Editor to search for content in IFlow attachments.</li>
     </ul>
     <p>Thank you for using my extension!</p>
       <p>Johan Calderon</p></div>`
