@@ -144,6 +144,32 @@ sap.ui.define([
             } catch (error) {
                 return {textFormat:prettyXML(text),type:"xml"}
             }
+        },
+        calculateRangeDate:(Latest)=>{
+            let fromDate;
+            let toDate=new Date();
+            switch(Latest) {
+                case "PASTMIN":
+                    fromDate=new Date().setMinutes(new Date().getMinutes() - 1);
+                    break;
+                case "PASTHOUR":
+                    fromDate=new Date().setHours(new Date().getHours() - 1);                                                     
+                    break;
+                case "PAST24":
+                    fromDate=new Date().setDate(new Date().getDate() - 1);
+                break;
+                case "PASTWEEK":
+                    fromDate=new Date().setDate(new Date().getDate() - 7);
+                break;
+                case "PASTMONTH":
+                    fromDate=new Date().setMonth(new Date().getMonth() - 1);
+                break;                                                                                    
+            }            
+            //fromDate=date2String(new Date(fromDate));
+            //toDate=date2String(new Date(toDate));
+            fromDate=new Date(fromDate).toISOString().replace("Z","");
+            toDate=new Date(toDate).toISOString().replace("Z","");
+            return {fromDate,toDate}           
         }
     };
 });

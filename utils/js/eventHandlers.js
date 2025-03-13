@@ -32,8 +32,10 @@ sap.ui.define([
     "sap/m/IconTabBar",
     "sap/m/IconTabFilter",
     "sap/m/ObjectStatus",
+    "sap/m/DatePicker",
+    "sap/m/Select",
     "utils"
-], function(cpi,constants,MessageToast,BusyDialog,Dialog,Table,Column,ColumnListItem,Text,Button,JSONModel,QuickView,QuickViewPage,QuickViewGroup,QuickViewGroupElement,CodeEditor,VBox,HBox,InputListItem,Input,CheckBox,ProgressIndicator,MessageBox,IconTabBar,IconTabFilter,ObjectStatus,utils){
+], function(cpi,constants,MessageToast,BusyDialog,Dialog,Table,Column,ColumnListItem,Text,Button,JSONModel,QuickView,QuickViewPage,QuickViewGroup,QuickViewGroupElement,CodeEditor,VBox,HBox,InputListItem,Input,CheckBox,ProgressIndicator,MessageBox,IconTabBar,IconTabFilter,ObjectStatus,DatePicker,Select,utils){
     "use strict";    
     console.log("Start eventHandler script")
     let counterTimer=10;
@@ -384,10 +386,10 @@ sap.ui.define([
         busyDialog.destroy();
     }
 
-    const getlastestMessage=async(flowId)=>{
+    const getlastestMessage=async(flowId,fromDate,toDate)=>{        
         const popover=sap.ui.getCore().byId(`${constants.prefixId}Popover`);
         popover.getAggregation("content")[0].setBusy(true);     
-        const messages=await cpi.getlastestMessage(flowId);
+        const messages=await cpi.getlastestMessage(flowId,fromDate,toDate);
         const messageModel=new JSONModel(messages.d.results);
         popover.setModel(messageModel);
         popover.getAggregation("content")[0].setBusy(false);
@@ -546,8 +548,8 @@ sap.ui.define([
                 popover=new sap.m.Popover(`${constants.prefixId}Popover`,{
                     title: `Latest messages`,
                     placement:"Bottom",
-                    contentWidth: "500px",
-                    contentHeight:"600px",                
+                    contentWidth: "550px",
+                    contentHeight:"650px",                
                     content:[                    
                         new Table({
                                 columns:[
@@ -577,8 +579,9 @@ sap.ui.define([
                                             new Text({text:"{LogLevel}"}),
                                             new HBox({
                                                 items:[
-                                                    new Button({enabled:"{enabled}",tooltip:"Draw trace",icon:"sap-icon://chevron-phase-2",press:openTrace}),
-                                                    new Button({tooltip:"Open trace",icon:"sap-icon://open-command-field",press:cpi.openTrace})
+                                                    new Button({enabled:"{enabled}",tooltip:"Draw trace",icon:"sap-icon://chevron-phase-2",press:openTrace}),                                                                                                        
+                                                    new Button({tooltip:"Open trace",icon:"sap-icon://slim-arrow-right",press:cpi.openTrace}),
+                                                    new Button({tooltip:"Open trace details",icon:"sap-icon://open-command-field",press:cpi.openTraceDetails})
                                                 ]
                                             })
                                         ]
@@ -586,35 +589,120 @@ sap.ui.define([
                                 }
                             },
                         )],
-                    customHeader: new HBox({
+                    customHeader: new VBox({
                         items:[
-                            new Button({
-                                text: "Refresh",
-                                icon:"sap-icon://refresh",
-                                press:()=>{                                    
-                                    getlastestMessage(flowId);
-                                }                                
+                            new HBox({
+                                items:[
+                                    new InputListItem({
+                                        label:"Time:",
+                                        content:[
+                                            new Select(`${constants.prefixId}_selectDates`,{
+                                                items: {
+                                                    path: "timeFilter>/items",
+                                                    template: new sap.ui.core.Item({
+                                                        key: "{timeFilter>key}",
+                                                        text: "{timeFilter>text}"
+                                                    })
+                                                },
+                                                change:(event)=>{
+                                                    const {fromDate,toDate}=utils.calculateRangeDate(event.getSource().getSelectedKey());                                                          
+                                                    getlastestMessage(flowId,fromDate,toDate);
+                                                }
+                                            }),
+                                            new Button({
+                                                text: "Refresh",
+                                                icon:"sap-icon://refresh",
+                                                press:()=>{    
+                                                    const dates=sap.ui.getCore().byId(`${constants.prefixId}_selectDates`).getSelectedKey();
+                                                    const {fromDate,toDate}=utils.calculateRangeDate(dates?dates:"PastHour");                                                   
+                                                    getlastestMessage(flowId,fromDate,toDate);                                
+                                                }                                
+                                            }),
+                                            new Button({
+                                                text: "Clear",
+                                                icon:"sap-icon://clear-all",
+                                                press: ()=>{        
+                                                    clearTrace();
+                                                }                                
+                                            }),
+                                            new Button({
+                                                text: "Open Messages",
+                                                icon:"sap-icon://open-command-field",
+                                                press: ()=>{        
+                                                    cpi.openLogTab(flowId,sap.ui.getCore().byId(`${constants.prefixId}_selectDates`).getSelectedKey());                              
+                                                }
+                                            }),
+                                            new Button({                                                
+                                                icon:"sap-icon://navigation-right-arrow",
+                                                press: (event)=>{                                                          
+                                                    const visible=sap.ui.getCore().byId(`${constants.prefixId}hboxAttach`).getVisible();
+                                                    sap.ui.getCore().byId(`${constants.prefixId}hboxAttach`).setVisible(visible?false:true);
+                                                    event.getSource().setIcon(visible?'sap-icon://navigation-right-arrow':'sap-icon://navigation-left-arrow')
+                                                }
+                                            })
+                                        ]
+                                    })                                    
+                                ]
                             }),
-                            new Button({
-                                text: "Clear",
-                                icon:"sap-icon://clear-all",
-                                press: ()=>{        
-                                    clearTrace();
-                                }                                
-                            }),
-                            new Button({
-                                text: "Open Messages",
-                                icon:"sap-icon://open-command-field",
-                                press: ()=>{        
-                                    cpi.openLogTab(flowId);                              
-                                }
+                            new HBox(`${constants.prefixId}hboxAttach`,{
+                                visible:false,
+                                items:[
+                                    new InputListItem(`${constants.prefixId}_findAttachment`,{
+                                        label:"Find in attachments:",
+                                        content:[
+                                            new Input({
+                                                type:"Text",  
+                                                width:"80px",                                                                                      
+                                                liveChange:(event)=>{
+                                                    if (event.getSource().getValue()=="")
+                                                        event.getSource().getParent().getParent().getAggregation("items")[1].setProperty("enabled",false);
+                                                    else
+                                                        event.getSource().getParent().getParent().getAggregation("items")[1].setProperty("enabled",true);
+                                                }
+                                            })                                            
+                                        ]
+                                    }),
+                                    new Button({
+                                        enabled:false,
+                                        text: "Search",
+                                        press:async(event)=>{
+                                            const popover=sap.ui.getCore().byId(`${constants.prefixId}Popover`);
+                                            popover.getAggregation("content")[0].setBusy(true);
+                                            const dates=sap.ui.getCore().byId(`${constants.prefixId}_selectDates`).getSelectedKey();
+                                            const {fromDate,toDate}=utils.calculateRangeDate(dates?dates:"PASTHOUR");                                                          
+                                            const messages=await cpi.getlastestMessage(flowId,fromDate,toDate);
+                                            cpi.findInAttachment(messages,event.getSource().getParent().getAggregation("items")[0].getAggregation("content")[0].getValue()).then((result)=>{
+                                                const messageModel=new JSONModel(messages.d.results);
+                                                popover.setModel(messageModel);                                                
+                                            }).catch((error)=>{
+                                                console.log(error);                 
+                                                MessageBox.error(error);                                       
+                                            }).finally(()=>{
+                                                popover.getAggregation("content")[0].setBusy(false);
+                                            })
+                                        }
+                                    })
+                                ]
                             })
                         ]
                     })                    
                 });
-            }  
-            getlastestMessage(flowId);
+                popover.setModel(new JSONModel({
+                    items: [
+                        { key: "PASTMIN", text: "Past Minute" },
+                        { key: "PASTHOUR", text: "Past Hour" },
+                        { key: "PAST24", text: "Past 24 Hours" },
+                        { key: "PASTWEEK", text: "Past Week" },
+                        { key: "PASTMONTH", text: "Past Month" }                        
+                    ]
+                }),"timeFilter");
+                sap.ui.getCore().byId(`${constants.prefixId}_selectDates`).setSelectedKey("PASTHOUR");
+            }        
             popover.openBy(event.getSource());
+            const dates=sap.ui.getCore().byId(`${constants.prefixId}_selectDates`).getSelectedKey();
+            const {fromDate,toDate}=utils.calculateRangeDate(dates?dates:"PASTHOUR");                                                          
+            getlastestMessage(flowId,fromDate,toDate);       
+            
         },     
         info:(event)=>{         
             let quickViewInfo=sap.ui.getCore().byId(`${constants.prefixId}QuickView`);

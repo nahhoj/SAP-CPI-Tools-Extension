@@ -162,16 +162,21 @@ sap.ui.define([
                 return null;   
             }   
         },  
-        openLogTab:(iflowName)=>{   
-            const url = `${constants.apiBaseURLCPI}/shell/monitoring/Messages/{"status":"ALL","artifact":"${iflowName}","time":"PASTHOUR","useAdvancedFields":false}`;
+        openLogTab:(iflowName,time)=>{            
+            const url = `${constants.apiBaseURLCPI}/shell/monitoring/Messages/{"status":"ALL","artifact":"${iflowName}","time":"${time}","useAdvancedFields":false}`;
             window.open(url,'_blank');
         },
-        openTrace:async(event)=>{            
+        openTraceDetails:async(event)=>{            
             const messageGuid=event.getSource().getModel().getProperty("MessageGuid",event.getSource().getBindingContext());
             let url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogs('${messageGuid}')/Runs?$format=json`; 
             const response= await net.callService(url,"GET",[],null,false);
             const id=JSON.parse(response.body).d.results[0].Id;
             url = `${constants.apiBaseURLCPI}/shell/monitoring/MessageProcessingRun/{"parentContext":{"MessageMonitor":{"artifactKey":"__ALL__MESSAGE_PROVIDER","artifactName":"All%20Artifacts"}},"messageProcessingLog":"${messageGuid}","RunId":"${id}"}`;
+            window.open(url,'_blank');
+        },
+        openTrace:(event)=>{
+            const messageGuid=event.getSource().getModel().getProperty("MessageGuid",event.getSource().getBindingContext());
+            let url=`${constants.apiBaseURLCPI}/shell/monitoring/Messages/{"identifier":"${messageGuid}"}`;
             window.open(url,'_blank');
         },
         getTraceSteps:async(messageGuid)=>{                
@@ -350,8 +355,9 @@ sap.ui.define([
             }
             return packageInfo;
         },
-        getlastestMessage:async(flowId)=>{            
-            let url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogs?$select=MessageGuid,LogStart,LogEnd,Status,LogLevel&$filter=IntegrationArtifact/Id eq '${flowId}' and (Status ne 'ABANDONED' and Status ne 'DISCARDED')&$orderby=LogEnd desc&$format=json&$top=50`;            
+        getlastestMessage:async(flowId,fromDate,toDate)=>{                 
+            //let url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogs?$select=MessageGuid,LogStart,LogEnd,Status,LogLevel&$filter=IntegrationArtifact/Id eq '${flowId}' and (Status ne 'ABANDONED' and Status ne 'DISCARDED')&$orderby=LogEnd desc&$format=json&$top=50`;            
+            let url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogs?$select=MessageGuid,LogStart,LogEnd,Status,LogLevel&$filter=LogEnd ge datetime'${fromDate}' and LogStart le datetime'${toDate}' and IntegrationArtifact/Id eq '${flowId}' and (Status ne 'ABANDONED' and Status ne 'DISCARDED')&$orderby=LogEnd desc&$format=json`;
             let responseJson={};
             try {
                 let response=await net.callService(url,"GET",[],null,false);
@@ -528,6 +534,37 @@ sap.ui.define([
                 utils.fireEvent("CPI",{percentage,state:"end"});
                 resolve(result);
             })    
+        },
+        findInAttachment:async(messages,world)=>{
+            return new Promise(async(resolve,reject)=>{
+                let url;
+                let response;
+                let responseJson;
+                let responseContent;       
+                let foundMessage=[];                
+                for(const message of messages.d.results){
+                    url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogs('${message.MessageGuid}')/Attachments?$format=json`;
+                    try {
+                        response=await net.callService(url,"GET",[],null,false);    
+                        responseJson=JSON.parse(response.body);
+                    } catch (error) {
+                        reject(err)
+                    }
+                    for(const attachment of responseJson.d.results){
+                        url=`${constants.apiBaseURLCPI}${constants.serviceURL.apiv1}/MessageProcessingLogAttachments('${attachment.Id}')/$value`;
+                        try {
+                            responseContent=await net.callService(url,"GET",[],null,false);
+                            if (responseContent.body?.includes(world))
+                                foundMessage.push(message.MessageGuid);            
+                        } catch (error) {
+                            reject(err)            
+                        }
+                    }
+                };
+                messages.d.results=messages.d.results.filter(it=>foundMessage.includes(it.MessageGuid))
+                resolve(messages);                
+            });
+  
         }
     };
 });
