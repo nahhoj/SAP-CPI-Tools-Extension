@@ -1,0 +1,41 @@
+{
+    "manifest_version":3,
+    "name":"SAP CPI Tools Extension",
+    "version":"1.1.7",
+    "version_name":"1.1.7",
+    "description":"Extension to Simplify Integration Development and Testing for SAP CPI",
+    "icons":{
+        "16":"/images/icon.png",
+        "32":"/images/icon.png",
+        "48":"/images/icon.png",
+        "128":"/images/icon.png"
+    },
+    "permissions": [             
+        "scripting",
+        "tabs",
+        "activeTab",        
+        "contextMenus"
+    ],
+    "background":{
+        "service_worker":"background.js"
+    },
+    "host_permissions": [
+       "https://*.hana.ondemand.com/*"
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                        "utils/js/constants.js",
+                        "utils/js/net.js",
+                        "utils/js/utils.js",                       
+                        "utils/js/ui.js",
+                        "utils/js/eventHandlers.js",
+                        "utils/js/cpi.js",
+                        "utils/env"
+                        ],
+            "matches": [
+                "https://*.hana.ondemand.com/*"
+            ]
+        }
+    ]
+}
